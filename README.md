@@ -31,14 +31,17 @@ enabled = true
 debug_log = false
 
 [threshold]
+mode = "or"              # 门槛模式：'and'=同时满足天数和条数，'or'=满足其一即可，'days'=仅看天数，'messages'=仅看条数
 min_active_days = 7      # 最少活跃天数
-min_messages = 200        # 最少消息数
+min_messages = 200       # 最少消息数
 
 [analysis]
-sample_limit = 3000       # 单次查询最多取多少条最新消息
+sample_mode = "messages" # 取样模式：'messages'=取最新 N 条消息，'days'=取最近 N 天的消息
+sample_limit = 3000      # sample_mode='messages' 时：最多取多少条最新消息
+sample_days = 90         # sample_mode='days' 时：取最近多少天的消息
 
 [rebuild]
-interval_hours = 24       # 定时重建间隔（小时）
+interval_hours = 24      # 定时重建间隔（小时）
 
 [injection]
 enabled = true
@@ -77,6 +80,7 @@ record_user_habit(
 [用户作息特征参考]
 消息时间分布：上午47.2%、下午22.8%、晚上19.3%、深夜8.1%
 最活跃时段：上午（9-10点）
+手动记录习惯：每天早上07:30跑步
 数据来源：过去45天内，12天活跃，共计247条消息
 ```
 
