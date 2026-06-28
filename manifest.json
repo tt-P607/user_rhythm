@@ -1,0 +1,38 @@
+{
+  "name": "user_rhythm",
+  "display_name": "用户作息与习惯分析",
+  "version": "1.0.0",
+  "description": "通过统计用户历史消息的时间分布分析其作息规律，支持 LLM 查询/记录用户习惯，私聊时被动注入作息简报。",
+  "author": "MoFox Team",
+  "license": "AGPL-v3.0",
+  "categories": ["tool"],
+  "tags": ["rhythm", "habit", "schedule", "prompt", "injector"],
+  "dependencies": {
+    "plugins": [],
+    "components": []
+  },
+  "include": [
+    {
+      "component_type": "tool",
+      "component_name": "query_user_rhythm",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "tool",
+      "component_name": "record_user_habit",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "rhythm_prompt_injector",
+      "dependencies": [],
+      "enabled": true
+    }
+  ],
+  "entry_point": "plugin.py",
+  "min_core_version": "1.0.0",
+  "python_dependencies": [],
+  "dependencies_required": false
+}
