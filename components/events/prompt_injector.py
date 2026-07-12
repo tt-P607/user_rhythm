@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.app.plugin_system.base import BaseEventHandler
 from src.app.plugin_system.api import event_api, log_api
+from src.app.plugin_system.api.prompt_api import add_stream_reminder
+from src.app.plugin_system.base import BaseEventHandler
+from src.core.prompt import SystemReminderInsertType
 
 logger = log_api.get_logger("user_rhythm.injector")
 
@@ -115,9 +117,14 @@ class RhythmPromptInjector(BaseEventHandler):
         # 构建注入内容
         injected_text = self._build_injection_text(stats, habits)
 
-        # 追加到 values["extra"]
-        existing_extra = str(values.get("extra", ""))
-        values["extra"] = (existing_extra + injected_text) if existing_extra else injected_text
+        # 写入流私有 actor bucket，由 chatter 通过 with_reminder="actor" 自动拾取
+        add_stream_reminder(
+            stream_id=stream_id,
+            bucket="actor",
+            name="user_rhythm_impression",
+            content=injected_text,
+            insert_type=SystemReminderInsertType.DYNAMIC,
+        )
 
         if config.plugin.debug_log:
             logger.info(f"已注入作息简报: person_id={person_id[:8]}...")
