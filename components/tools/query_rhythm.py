@@ -24,8 +24,8 @@ _TOOL_DESCRIPTION = """查询指定用户的消息时间分布数据及手动记
 class QueryUserRhythmTool(BaseTool):
     """查询用户作息分布与习惯的工具类。"""
 
-    tool_name = "query_user_rhythm"
-    tool_description = _TOOL_DESCRIPTION
+    name = "query_user_rhythm"
+    description = _TOOL_DESCRIPTION
 
     async def execute(
         self,

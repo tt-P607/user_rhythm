@@ -21,7 +21,7 @@ class RhythmStore:
 
     def __init__(self) -> None:
         """初始化存储管理器。"""
-        from .models import Base, RhythmSnapshotModel, UserHabitModel
+        from .models import RhythmSnapshotModel, UserHabitModel
 
         self._db_path = "data/user_rhythm/rhythm.db"
         self._db = storage_api.PluginDatabase(self._db_path, [RhythmSnapshotModel, UserHabitModel])

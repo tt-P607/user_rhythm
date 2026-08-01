@@ -13,8 +13,8 @@ from src.app.plugin_system.base import BaseConfig, Field, SectionBase, config_se
 class UserRhythmConfig(BaseConfig):
     """user_rhythm 用户作息分析插件配置模型。"""
 
-    config_name: ClassVar[str] = "config"
-    config_description: ClassVar[str] = "用户作息分析插件配置"
+    name: ClassVar[str] = "config"
+    description: ClassVar[str] = "用户作息分析插件配置"
 
     @config_section("plugin")
     class PluginSection(SectionBase):

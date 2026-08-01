@@ -21,8 +21,8 @@ class RhythmPromptInjector(BaseEventHandler):
     订阅 on_prompt_build 事件，在私聊场景自动注入用户作息与习惯简报。
     """
 
-    handler_name = "rhythm_prompt_injector"
-    handler_description = "在私聊场景自动注入用户作息简报到 User Prompt"
+    name = "rhythm_prompt_injector"
+    description = "在私聊场景自动注入用户作息简报到 User Prompt"
     weight = 12
     intercept_message = False
     init_subscribe = ["on_prompt_build"]

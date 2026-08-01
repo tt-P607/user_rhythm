@@ -27,7 +27,6 @@ class UserRhythmPlugin(BasePlugin):
 
     plugin_name = "user_rhythm"
     plugin_description = "用户作息与习惯分析插件"
-    plugin_version = "1.0.0"
 
     configs: list[type] = [UserRhythmConfig]
 
@@ -61,7 +60,6 @@ class UserRhythmPlugin(BasePlugin):
         logger.info("插件数据库初始化完成")
 
         # 启动定时重建任务
-        from src.app.plugin_system.api import log_api
         from src.kernel.scheduler import get_unified_scheduler, TriggerType
 
         scheduler = get_unified_scheduler()
@@ -112,7 +110,6 @@ class UserRhythmPlugin(BasePlugin):
         """后台任务：重建过期的快照（仅当用户有新消息时）。"""
         from .core.analyzer import RhythmAnalyzer
         from .core.store import get_rhythm_store
-        from src.app.plugin_system.api import database_api
         from src.core.models.sql_alchemy import Messages
         from sqlalchemy import select
         from src.kernel.db.core.session import get_session_factory

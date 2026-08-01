@@ -5,11 +5,10 @@
 
 from __future__ import annotations
 
-import time
 from datetime import datetime
 from typing import Any
 
-from src.app.plugin_system.api import database_api, log_api
+from src.app.plugin_system.api import log_api
 from src.core.models.sql_alchemy import Messages
 
 logger = log_api.get_logger("user_rhythm.analyzer")

@@ -22,8 +22,8 @@ _TOOL_DESCRIPTION = """记录用户明确陈述的时间习惯或生活规律。
 class RecordUserHabitTool(BaseTool):
     """记录用户习惯的工具类。"""
 
-    tool_name = "record_user_habit"
-    tool_description = _TOOL_DESCRIPTION
+    name = "record_user_habit"
+    description = _TOOL_DESCRIPTION
 
     async def execute(
         self,
