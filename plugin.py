@@ -26,7 +26,6 @@ class UserRhythmPlugin(BasePlugin):
     """
 
     plugin_name = "user_rhythm"
-    plugin_description = "用户作息与习惯分析插件"
 
     configs: list[type] = [UserRhythmConfig]
 
