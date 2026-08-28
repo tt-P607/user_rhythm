@@ -168,6 +168,7 @@ class UserRhythmPlugin(BasePlugin):
                 if analysis["available"]:
                     await store.save_snapshot(person_id, analysis, now)
                     rebuilt_count += 1
+                    await self._notify_person_changed(person_id)
                 else:
                     await store.update_snapshot_timestamp(person_id, now)
                     skipped_count += 1
@@ -177,3 +178,24 @@ class UserRhythmPlugin(BasePlugin):
                 skipped_count += 1
 
         logger.info(f"定时重建任务完成：重建 {rebuilt_count}，跳过 {skipped_count}")
+
+    async def _notify_person_changed(self, person_id: str) -> None:
+        """推刷新：用户作息内容变化后，同步其全部私聊流的作息简报。"""
+        from .core.injection import refresh_person_reminders
+        from .core.store import get_rhythm_store
+
+        config = self.config
+        if not isinstance(config, UserRhythmConfig):
+            return
+        try:
+            changed = await refresh_person_reminders(
+                person_id,
+                config=config,
+                store=get_rhythm_store(),
+            )
+            if changed and config.plugin.debug_log:
+                logger.info(
+                    f"快照已重建，同步作息简报: person_id={person_id[:8]}..., streams={changed}"
+                )
+        except Exception as e:
+            logger.warning(f"推送作息简报刷新失败 person_id={person_id[:8]}...: {e}")

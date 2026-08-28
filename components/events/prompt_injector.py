@@ -5,20 +5,20 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from src.app.plugin_system.api import event_api, log_api
-from src.app.plugin_system.api.prompt_api import add_stream_reminder
 from src.app.plugin_system.base import BaseEventHandler
-from src.core.prompt import SystemReminderInsertType
 
 logger = log_api.get_logger("user_rhythm.injector")
 
 
 class RhythmPromptInjector(BaseEventHandler):
     """作息简报注入器。
-    
-    订阅 on_prompt_build 事件，在私聊场景自动注入用户作息与习惯简报。
+
+    冷启动兜底：对目标模板命中的聊天流，在 reminder 缺失时补齐注入；
+    reminder 已存在或处于冷却期时立即返回，不产生查库开销。
     """
 
     name = "rhythm_prompt_injector"
@@ -27,15 +27,26 @@ class RhythmPromptInjector(BaseEventHandler):
     intercept_message = False
     init_subscribe = ["on_prompt_build"]
 
+    def __init__(self, plugin: Any) -> None:
+        """初始化注入器。
+
+        Args:
+            plugin: 所属插件实例
+        """
+        super().__init__(plugin)
+        # 冷却表：stream_id -> 冷却结束时刻（monotonic 秒），仅含冷却中的流
+        self._cooldown_until: dict[str, float] = {}
+
     async def execute(
         self,
         event_name: str,
         params: dict[str, Any],
     ) -> tuple[event_api.EventDecision, dict[str, Any]]:
-        """处理 on_prompt_build 事件。"""
+        """处理 on_prompt_build 事件，执行冷启动兜底同步。"""
+        from src.app.plugin_system.api.prompt_api import get_stream_reminder
+
+        from ...core.injection import REMINDER_BUCKET, REMINDER_NAME
         from ..configs.config import UserRhythmConfig
-        from ...core.analyzer import RhythmAnalyzer
-        from ...core.store import get_rhythm_store
 
         config = self.plugin.config
         if not isinstance(config, UserRhythmConfig):
@@ -50,113 +61,69 @@ class RhythmPromptInjector(BaseEventHandler):
             return event_api.EventDecision.SUCCESS, params
 
         values = params.get("values", {})
-        
+
         # 获取 stream_id（KFC 直接放在 values 中）
         stream_id = str(values.get("stream_id", "")).strip()
         if not stream_id:
             return event_api.EventDecision.SUCCESS, params
 
-        # 通过 stream_id 查询 ChatStreams，拿到 chat_type 和 person_id
+        # 热路径：reminder 存在即视为内容最新（变化源会推刷新），直接返回
+        if get_stream_reminder(stream_id, REMINDER_BUCKET, [REMINDER_NAME]):
+            return event_api.EventDecision.SUCCESS, params
+
+        # 冷路径：reminder 缺失；冷却期内不重复尝试。
+        # 失败冷却复用快照重建间隔，不额外引入可调项
+        now = time.monotonic()
+        wake_at = self._cooldown_until.get(stream_id)
+        if wake_at is not None and now < wake_at:
+            return event_api.EventDecision.SUCCESS, params
+        self._cooldown_until[stream_id] = now + config.rebuild.interval_hours * 3600
+
+        # 冷却已登记，执行一次冷启动同步（查流身份 + reminder 写入/移除）
+        await self._sync_stream(stream_id, config)
+        return event_api.EventDecision.SUCCESS, params
+
+    async def _sync_stream(self, stream_id: str, config: Any) -> None:
+        """查流身份并执行一次 reminder 同步（仅私聊）。
+
+        Args:
+            stream_id: 聊天流 ID
+            config: 插件配置
+        """
         from src.app.plugin_system.api import database_api
         from src.core.models.sql_alchemy import ChatStreams
 
+        from ...core.injection import collect_rhythm_stats, sync_rhythm_reminder
+        from ...core.store import get_rhythm_store
+
         try:
-            chat_stream_row = await database_api.get_by(ChatStreams, stream_id=stream_id)
+            chat_stream_row = await database_api.get_by(
+                ChatStreams, stream_id=stream_id
+            )
             if not chat_stream_row:
-                return event_api.EventDecision.SUCCESS, params
-            chat_type = str(getattr(chat_stream_row, "chat_type", "")).strip()
-            person_id = str(getattr(chat_stream_row, "person_id", "")).strip()
+                return
+            chat_type = str(chat_stream_row.chat_type or "").strip()
+            person_id = str(chat_stream_row.person_id or "").strip()
             if not person_id:
-                return event_api.EventDecision.SUCCESS, params
+                return
         except Exception as e:
             logger.debug(f"查询 chat_streams 失败: {e}")
-            return event_api.EventDecision.SUCCESS, params
+            return
 
-        # 只在私聊场景注入
+        # 只在私聊场景同步
         if chat_type != "private":
-            return event_api.EventDecision.SUCCESS, params
+            return
 
-        # 获取或计算快照
         store = get_rhythm_store()
-        snapshot = await store.get_snapshot(person_id)
-
-        if not snapshot:
-            # 缓存不存在，实时计算
-            analyzer = RhythmAnalyzer(
-                min_active_days=config.threshold.min_active_days,
-                min_messages=config.threshold.min_messages,
-                sample_limit=config.analysis.sample_limit,
-                sample_days=config.analysis.sample_days,
-                sample_mode=config.analysis.sample_mode,
-                threshold_mode=config.threshold.mode,
-            )
-            result = await analyzer.analyze(person_id)
-
-            if not result["available"]:
-                # 数据不足，不注入
-                return event_api.EventDecision.SUCCESS, params
-
-            # 保存快照
-            import time
-            now = time.time()
-            await store.save_snapshot(person_id, result, now)
-            stats = result["stats"]
-        else:
-            stats = {
-                "total_messages": snapshot["total_messages"],
-                "active_days": snapshot["active_days"],
-                "data_span_days": snapshot["data_span_days"],
-                "slot_pct": snapshot["slot_pct"],
-                "peak_slot": snapshot["peak_slot"],
-                "peak_hours": snapshot["peak_hours"],
-            }
-
-        # 获取手动记录的习惯
-        habits = await store.get_habits(person_id)
-
-        # 构建注入内容
-        injected_text = self._build_injection_text(stats, habits)
-
-        # 写入流私有 actor bucket，由 chatter 通过 with_reminder="actor" 自动拾取
-        add_stream_reminder(
-            stream_id=stream_id,
-            bucket="actor",
-            name="user_rhythm_impression",
-            content=injected_text,
-            insert_type=SystemReminderInsertType.DYNAMIC,
+        stats, habits = await collect_rhythm_stats(
+            person_id, config=config, store=store
         )
-
-        if config.plugin.debug_log:
-            logger.info(f"已注入作息简报: person_id={person_id[:8]}...")
-
-        return event_api.EventDecision.SUCCESS, params
-
-    def _build_injection_text(self, stats: dict[str, Any], habits: list[dict[str, Any]]) -> str:
-        """构建注入文本（自然化描述，像是对用户作息的印象）。"""
-        # 格式化完整时段占比
-        slot_items = sorted(stats["slot_pct"].items(), key=lambda x: x[1], reverse=True)
-        slot_strs = [f"{name}{pct:.1f}%" for name, pct in slot_items]
-        slot_line = "、".join(slot_strs)
-
-        # 最活跃时段（带具体小时）
-        peak_hours_str = "-".join([f"{h}点" for h in sorted(stats["peak_hours"][:2])])
-        peak_line = f"{stats['peak_slot']}（集中在{peak_hours_str}）"
-
-        # 数据来源说明
-        source_line = f"基于过去{stats['data_span_days']}天的互动观察，共{stats['total_messages']}条消息"
-
-        # 组装成自然的"印象"描述
-        return f"""
-
-<关于对方作息的印象>
-你对这个人的作息印象：
-· 消息时间分布：{slot_line}
-· 最常活跃时段：{peak_line}
-· {source_line}
-
-你可以结合当前时间和这些作息规律，自然地理解对方现在可能处于什么状态。
-</关于对方作息的印象>
-"""
+        await sync_rhythm_reminder(
+            stream_id=stream_id,
+            stats=stats,
+            habits=habits,
+            debug_log=bool(config.plugin.debug_log),
+        )
 
 
 __all__ = ["RhythmPromptInjector"]

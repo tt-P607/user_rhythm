@@ -68,10 +68,29 @@ class RecordUserHabitTool(BaseTool):
         try:
             await store.add_habit(person_id, habit_desc, habit_category, cron_like_time)
             logger.info(f"成功记录习惯: person_id={person_id[:8]}..., desc={habit_desc}")
+            await self._push_refresh(person_id)
             return True, f"已成功记录该习惯：{habit_desc}"
         except Exception as e:
             logger.error(f"记录习惯失败: {e}")
             return False, f"记录习惯失败: {e}"
+
+    async def _push_refresh(self, person_id: str) -> None:
+        """推刷新：习惯变化后，同步该用户全部私聊流的作息简报。"""
+        from ..configs.config import UserRhythmConfig
+        from ...core.injection import refresh_person_reminders
+        from ...core.store import get_rhythm_store as _get_store
+
+        config = self.plugin.config
+        if not isinstance(config, UserRhythmConfig):
+            return
+        try:
+            await refresh_person_reminders(
+                person_id,
+                config=config,
+                store=_get_store(),
+            )
+        except Exception as e:
+            logger.warning(f"习惯变化后刷新作息简报失败: {e}")
 
 
 __all__ = ["RecordUserHabitTool"]

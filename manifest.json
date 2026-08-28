@@ -8,7 +8,7 @@
     "storage_api": "1.0.0"
   },
   "display_name": "用户作息与习惯分析",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "通过统计用户历史消息的时间分布分析其作息规律，支持 LLM 查询/记录用户习惯，私聊时被动注入作息简报。",
   "author": "言柒",
   "license": "AGPL-v3.0",
